@@ -34,17 +34,50 @@ The datasets can be obtained by following the instructions in this [repo](https:
 
 ### Environment setup
 
-1. Install miniconda.
+#### Quick Setup (Recommended)
+```powershell
+# 1. Install Miniconda (if not installed)
+# Download from: https://docs.conda.io/en/latest/miniconda.html
 
-2. Create a conda environment and install Pytorch and necessary dependencies. The environment is named as `timesmamba`. You may run the following bash script.
+# 2. Create and activate environment
+conda create -n timesmamba python=3.11 -y
+conda activate timesmamba
 
-```bash
-# Tested to work on Linux, but not on WSL.
-bash create_env.sh
+# 3. Install PyTorch (choose one option)
+# Option A - CPU only:
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Option B - GPU with CUDA 12.1:
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# 4. Install dependencies
+pip install "numpy<2" packaging pandas scikit-learn matplotlib einops
+
+# 5. Test setup
+python test_timesmamba.py
 ```
+
+#### Detailed Setup
+For complete installation instructions, see [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)
 
 ### Model training and evaluation
 
+#### Quick Start
+```powershell
+# Activate environment
+conda activate timesmamba
+
+# ETTh1 dataset
+python run.py --model TimesMamba --data ETTh1 --seq_len 96 --pred_len 96 --channel_independence
+
+# ECL dataset  
+python run.py --model TimesMamba --data custom --root_path ./dataset/electricity/ --data_path electricity.csv --seq_len 96 --pred_len 96 --use_mark
+
+# Traffic dataset
+python run.py --model TimesMamba --data custom --root_path ./dataset/traffic/ --data_path traffic.csv --seq_len 96 --pred_len 96 --use_mark
+```
+
+#### Original Scripts (Linux/WSL)
 Train and evaluate the model. We provide the scrips under the folder ./scripts/. You can reproduce the results as the following examples:
 
 ```bash
