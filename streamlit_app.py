@@ -2,13 +2,20 @@ import os
 import sys
 import pandas as pd
 import numpy as np
-import streamlit as st
+try:
+    import streamlit as st
+except Exception:
+    print("Streamlit is not installed. Install it in your environment with:\n.venv\\Scripts\\python.exe -m pip install streamlit")
+    raise
 import subprocess
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# Add current directory to path for imports
-sys.path.append(os.getcwd())
+# Resolve project root and ensure it's on sys.path for imports
+script_dir = Path(__file__).resolve().parent
+project_root = str(script_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from results_manager import ResultsManager
 
@@ -41,16 +48,16 @@ def show_train_tab():
         if os.path.exists(train_file):
             with st.spinner(f"Training TimesMamba on {dataset}..."):
                 try:
-                    # Run training script
-                    cmd = f"cd train && python train.py"
-                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=os.getcwd())
-                    
+                    # Run training script using the same Python interpreter
+                    train_script = os.path.join(project_root, 'train', 'train.py')
+                    result = subprocess.run([sys.executable, train_script], capture_output=True, text=True, cwd=project_root)
+
                     if result.returncode == 0:
                         st.success(f"✅ Training completed for {dataset}!")
                         st.text(result.stdout)
-                        
+
                         # Show training plot if exists
-                        plot_file = f"train/training_loss_{dataset}.png"
+                        plot_file = os.path.join(project_root, f"train/training_loss_{dataset}.png")
                         if os.path.exists(plot_file):
                             st.image(plot_file, caption=f"Training Loss - {dataset}")
                     else:
@@ -66,12 +73,28 @@ def show_train_tab():
     
     models = []
     for ds in ['ETTh1', 'ETTh2', 'ETTm1', 'ETTm2']:
-        model_file = f"train/best_model_{ds}.pth"
-        plot_file = f"train/training_loss_{ds}.png"
-        
-        if os.path.exists(model_file):
+        # models are saved in saved_models with names like best_model_<Model>_<Dataset>.pth
+        saved_models_dir = os.path.join(project_root, 'saved_models')
+        model_found = False
+        if os.path.exists(saved_models_dir):
+            for fname in os.listdir(saved_models_dir):
+                if fname.endswith(f"_{ds}.pth"):
+                    model_found = True
+                    model_file = os.path.join(saved_models_dir, fname)
+                    break
+
+        # training plots are saved under figures/
+        plot_file = None
+        figures_dir = os.path.join(project_root, 'figures')
+        if os.path.exists(figures_dir):
+            for fname in os.listdir(figures_dir):
+                if f"training_loss" in fname and fname.endswith(f"_{ds}.png"):
+                    plot_file = os.path.join(figures_dir, fname)
+                    break
+
+        if model_found:
             models.append(ds)
-            
+
             col1, col2 = st.columns([1, 2])
             with col1:
                 st.write(f"✅ **{ds}** - Model trained")
@@ -79,9 +102,9 @@ def show_train_tab():
                 st.write(f"📦 Model size: {size_mb:.2f} MB")
                 st.write(f"📈 Status: Best model saved during training")
                 st.caption("(Validation loss monitored internally)")
-            
+
             with col2:
-                if os.path.exists(plot_file):
+                if plot_file and os.path.exists(plot_file):
                     st.image(plot_file, caption=f"Training Loss Curve - {ds}", width=400)
                 else:
                     st.info(f"Training plot not yet available for {ds}")
@@ -122,6 +145,8 @@ def show_train_tab():
 def show_test_tab():
     """Testing tab content"""
     st.header("🧪 TimesMamba Testing")
+    # common directories
+    figures_dir = os.path.join(project_root, 'figures')
     
     st.markdown("""
     **Why Test on Test Data, Not Validation Data?**
@@ -161,53 +186,103 @@ def show_test_tab():
             st.error(f"Test data not found: {test_file}")
     
     # Testing controls
-    if st.button("🧪 Run Test", type="primary"):
-        if os.path.exists(test_file):
-            with st.spinner(f"Testing TimesMamba on {dataset}..."):
-                try:
-                    # Run simple test script (the working one)
-                    cmd = f"cd test && python simple_test.py"
-                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=os.getcwd())
-                    
-                    if result.returncode == 0:
-                        st.success(f"✅ Testing completed for {dataset}!")
-                        st.text(result.stdout)
-                        
-                        # Show test plot if exists
-                        plot_file = f"test/simple_test_{dataset}.png"
-                        if os.path.exists(plot_file):
-                            st.image(plot_file, caption=f"Test Results - {dataset}")
-                    else:
-                        st.error(f"❌ Testing failed!")
-                        st.text(result.stderr)
-                except Exception as e:
-                    st.error(f"Error: {e}")
-        else:
-            st.error("Please ensure test data exists!")
+        if st.button("🧪 Run Test", type="primary"):
+            if os.path.exists(test_file):
+                with st.spinner(f"Testing TimesMamba on {dataset}..."):
+                    try:
+                        test_script = os.path.join(project_root, 'test', 'simple_test.py')
+                        result = subprocess.run([sys.executable, test_script], capture_output=True, text=True, cwd=project_root)
+
+                        if result.returncode == 0:
+                            st.success(f"✅ Testing completed for {dataset}!")
+                            st.text(result.stdout)
+
+                            # Show test plot if exists (search figures directory)
+                            test_plot = None
+                            if os.path.exists(figures_dir):
+                                for fname in os.listdir(figures_dir):
+                                    if f"test_results" in fname and fname.endswith(f"_{dataset}.png"):
+                                        test_plot = os.path.join(figures_dir, fname)
+                                        break
+
+                            if test_plot and os.path.exists(test_plot):
+                                st.image(test_plot, caption=f"Test Results - {dataset}")
+                        else:
+                            st.error(f"❌ Testing failed!")
+                            st.text(result.stderr)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            else:
+                st.error("Please ensure test data exists!")
     
     # Show existing test results
     st.subheader("📈 Test Results")
     
     results = []
     for ds in ['ETTh1', 'ETTh2', 'ETTm1', 'ETTm2']:
-        plot_file = f"test/simple_test_{ds}.png"
-        
-        if os.path.exists(plot_file):
+        test_plot = None
+        if os.path.exists(figures_dir):
+            for fname in os.listdir(figures_dir):
+                if f"test_results" in fname and fname.endswith(f"_{ds}.png"):
+                    test_plot = os.path.join(figures_dir, fname)
+                    break
+
+        if test_plot and os.path.exists(test_plot):
             results.append(ds)
-            
+
             col1, col2 = st.columns([1, 2])
             with col1:
                 st.write(f"✅ **{ds}** - Test completed")
-            
+
             with col2:
-                st.image(plot_file, width=400)
-    
+                st.image(test_plot, width=400)
+
     if not results:
         st.info("No test results found. Run tests to see results.")
 
 def show_comparison_tab():
     """Model comparison tab"""
     st.header("🏆 Model Comparison")
+    
+    # Model info expander
+    with st.expander("ℹ️ About the 3 Models"):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.subheader("🔵 TimesMamba")
+            st.write("""
+            **Architecture:** State Space Model (Mamba)
+            - **Complexity:** O(n) Linear
+            - **Speed:** ⚡⚡⚡ Fast
+            - **SOTA:** Yes (2024)
+            - **Expected MSE:** 0.37-0.40
+            
+            State-of-the-art accuracy with minimal parameters.
+            """)
+        
+        with col2:
+            st.subheader("🟢 RNN (LSTM)")
+            st.write("""
+            **Architecture:** Recurrent Neural Network
+            - **Complexity:** O(n) Sequential
+            - **Speed:** ⚡⚡ Moderate
+            - **SOTA:** Classic Baseline
+            - **Expected MSE:** 0.42-0.48
+            
+            Traditional approach, good for comparison.
+            """)
+        
+        with col3:
+            st.subheader("🟡 ITransformer")
+            st.write("""
+            **Architecture:** Individual Transformer
+            - **Complexity:** O(n) per channel
+            - **Speed:** ⚡⚡⚡ Fast
+            - **Novel:** Recent (2023)
+            - **Expected MSE:** 0.38-0.45
+            
+            Independent attention per variable.
+            """)
     
     # Initialize results manager
     manager = ResultsManager()
@@ -284,6 +359,9 @@ def show_comparison_tab():
             styled_df = pivot_mae.style.apply(highlight_best, axis=1).format("{:.3f}")
             st.dataframe(styled_df, use_container_width=True)
     
+    # Get all data for best model rankings
+    df_all = manager.get_model_comparison()
+    
     # Second comparison tool: Filter by specific datasets/models
     st.subheader("🔍 Detailed Comparison View")
     
@@ -349,26 +427,28 @@ def show_comparison_tab():
     best_models_mse = []
     best_models_mae = []
     
-    for dataset in summary['datasets']:
-        for pred_len in sorted(df['pred_len'].unique()):
-            best_mse = manager.get_best_model(dataset, int(pred_len), metric='mse')
-            best_mae = manager.get_best_model(dataset, int(pred_len), metric='mae')
-            
-            if best_mse:
-                best_models_mse.append({
-                    'Dataset': dataset,
-                    'Prediction Length': pred_len,
-                    'Best Model (MSE)': best_mse[0],
-                    'MSE Score': f"{best_mse[1]:.4f}"
-                })
-            
-            if best_mae:
-                best_models_mae.append({
-                    'Dataset': dataset,
-                    'Prediction Length': pred_len,
-                    'Best Model (MAE)': best_mae[0],
-                    'MAE Score': f"{best_mae[1]:.4f}"
-                })
+    if not df_all.empty:
+        for dataset in summary['datasets']:
+            pred_lens = df_all[df_all['dataset'] == dataset]['pred_len'].unique()
+            for pred_len in sorted(pred_lens):
+                best_mse = manager.get_best_model(dataset, int(pred_len), metric='mse')
+                best_mae = manager.get_best_model(dataset, int(pred_len), metric='mae')
+                
+                if best_mse:
+                    best_models_mse.append({
+                        'Dataset': dataset,
+                        'Prediction Length': pred_len,
+                        'Best Model (MSE)': best_mse[0],
+                        'MSE Score': f"{best_mse[1]:.4f}"
+                    })
+                
+                if best_mae:
+                    best_models_mae.append({
+                        'Dataset': dataset,
+                        'Prediction Length': pred_len,
+                        'Best Model (MAE)': best_mae[0],
+                        'MAE Score': f"{best_mae[1]:.4f}"
+                    })
     
     col1, col2 = st.columns(2)
     

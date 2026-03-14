@@ -20,7 +20,17 @@ data_dict = {
 
 
 def data_provider(args, flag):
-    Data = Dataset_Pred if flag == "pred" else data_dict[args.data]
+    # If requesting predictions, use Dataset_Pred.
+    # If the provided data_path appears to be a split file (contains '_train', '_val', or '_test'),
+    # use Dataset_Custom which expects pre-split CSVs with date+features+target columns.
+    if flag == "pred":
+        Data = Dataset_Pred
+    else:
+        dp = args.data_path.lower() if hasattr(args, 'data_path') and args.data_path else ''
+        if any(x in dp for x in ['_train', '_val', '_test']):
+            Data = Dataset_Custom
+        else:
+            Data = data_dict[args.data]
 
     data_set = Data(
         root_path=args.root_path,

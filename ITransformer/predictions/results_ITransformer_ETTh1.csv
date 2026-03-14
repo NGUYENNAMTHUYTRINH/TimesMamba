@@ -1,0 +1,2 @@
+mse,mae,rmse,model,dataset,pred_len
+0.9926145672798157,0.8813055753707886,0.9963004402688055,ITransformer,ETTh1,24

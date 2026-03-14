@@ -6,14 +6,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
-# Add parent directory to path for imports
-sys.path.append('..')
-
-# Import mock mamba_ssm first
-sys.path.append('..')
-import mamba_ssm_mock
-sys.modules['mamba_ssm'] = mamba_ssm_mock
-print("Mamba SSM mock module loaded successfully")
+# Ensure project root is on sys.path and import mock mamba_ssm
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+try:
+    import mamba_ssm_mock
+    sys.modules['mamba_ssm'] = mamba_ssm_mock
+    print("Mamba SSM mock module loaded successfully")
+except Exception as e:
+    print(f"[WARN] Could not import mamba_ssm_mock from {project_root}: {e}")
 
 from model import TimesMamba
 
@@ -68,8 +70,8 @@ def simple_test_model(dataset='ETTh1'):
     print(f"[TESTING] {dataset} - Simple Test")
     print("=" * 50)
     
-    # Load test data directly
-    test_file = f'datasets/{dataset}/{dataset}_test.csv'
+    # Load test data directly (resolve path relative to this test script)
+    test_file = os.path.join(os.path.dirname(__file__), 'datasets', dataset, f'{dataset}_test.csv')
     if not os.path.exists(test_file):
         print(f"[ERROR] Test file not found: {test_file}")
         return None

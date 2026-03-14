@@ -61,6 +61,7 @@ class Dataset_ETT_hour(Dataset):
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
+            data = np.array(data, dtype=np.float32)
 
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
@@ -149,6 +150,7 @@ class Dataset_ETT_minute(Dataset):
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
+            data = np.array(data, dtype=np.float32)
 
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
@@ -249,6 +251,7 @@ class Dataset_Custom(Dataset):
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
+            data = np.array(data, dtype=np.float32)
 
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
@@ -330,6 +333,7 @@ class Dataset_PEMS(Dataset):
 
         df = pd.DataFrame(data)
         df = df.fillna(method='ffill', limit=len(df)).fillna(method='bfill', limit=len(df)).values
+        df = np.array(df, dtype=np.float32)
 
         self.data_x = df
         self.data_y = df
@@ -405,6 +409,7 @@ class Dataset_Solar(Dataset):
             data = self.scaler.transform(df_data)
         else:
             data = df_data
+            data = np.array(data, dtype=np.float32)
 
         self.data_x = data[border1:border2]
         self.data_y = data[border1:border2]
@@ -486,6 +491,7 @@ class Dataset_Pred(Dataset):
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
+            data = np.array(data, dtype=np.float32)
 
         tmp_stamp = df_raw[['date']][border1:border2]
         tmp_stamp['date'] = pd.to_datetime(tmp_stamp.date)

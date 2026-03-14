@@ -7,8 +7,22 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))  # Add parent directory to path
 
-# Load mock mamba-ssm first
-exec(open('../mamba_ssm_mock.py').read())
+# Load mock mamba-ssm first (resolve path relative to this script)
+mock_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'mamba_ssm_mock.py'))
+try:
+    exec(open(mock_path).read())
+    print(f"Mamba SSM mock module loaded from {mock_path}")
+except Exception as e:
+    # Fallback: ensure project root on sys.path and try import
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    try:
+        import mamba_ssm_mock  # type: ignore
+        sys.modules['mamba_ssm'] = mamba_ssm_mock  # type: ignore
+        print("Mamba SSM mock module imported via sys.path fallback")
+    except Exception as e2:
+        print(f"[WARN] Could not load mamba_ssm_mock: {e2}")
 
 import torch
 import numpy as np
@@ -23,8 +37,9 @@ from data_provider.data_factory import data_provider
 
 class Args:
     def __init__(self, dataset='ETTh1'):
-        # Dataset config
-        self.root_path = f'datasets/{dataset}'
+        # Dataset config (datasets live under train/datasets)
+        script_dir = os.path.dirname(__file__)
+        self.root_path = os.path.join(script_dir, 'datasets', dataset)
         self.data = dataset
         self.data_path = f'{dataset}_train.csv'  # Use train split
         
