@@ -10,6 +10,8 @@ from pathlib import Path
 # Add current directory to path for imports
 sys.path.append(os.getcwd())
 
+from results_manager import ResultsManager
+
 def show_train_tab():
     """Training tab content"""
     st.header("🚀 TimesMamba Training")
@@ -74,18 +76,63 @@ def show_train_tab():
             with col1:
                 st.write(f"✅ **{ds}** - Model trained")
                 size_mb = os.path.getsize(model_file) / (1024*1024)
-                st.write(f"Model size: {size_mb:.2f} MB")
+                st.write(f"📦 Model size: {size_mb:.2f} MB")
+                st.write(f"📈 Status: Best model saved during training")
+                st.caption("(Validation loss monitored internally)")
             
             with col2:
                 if os.path.exists(plot_file):
-                    st.image(plot_file, width=400)
+                    st.image(plot_file, caption=f"Training Loss Curve - {ds}", width=400)
+                else:
+                    st.info(f"Training plot not yet available for {ds}")
     
     if not models:
-        st.info("No trained models found. Start training to see results.")
+        st.info("""❌ No trained models found. Start training to see results.
+
+**Note:** During training, validation data is automatically used to:
+- Monitor overfitting (val_loss curve)
+- Save the best model
+- Implement early stopping""")
+    
+    # Explain validation process
+    with st.expander("ℹ️ Understanding Training & Validation"):
+        st.markdown("""
+        ### How Validation Works (Internal Process):
+        
+        **During Training (Each Epoch):**
+        1. **Train Phase:** Run model on training data → calculate train_loss
+        2. **Validation Phase:** Run model on validation data → calculate val_loss
+        3. **Decision Making:**
+           - If val_loss improves → Save as "best_model"
+           - If val_loss doesn't improve for 3 epochs → Stop training (Early Stopping)
+        
+        **Why Validation?**
+        - Prevent overfitting (when model memorizes data)
+        - Choose the best checkpoint automatically
+        - Use all data efficiently (70% train, 15% val, 15% test)
+        
+        **You don't need to run Testing on validation data** because:
+        - Validation data was seen during training (affects model learning)
+        - Test data is completely new (true evaluation)
+        - Best model is already selected using validation
+        
+        **Result:** `best_model_ETTh1.pth` = model with lowest validation loss
+        """)
 
 def show_test_tab():
     """Testing tab content"""
     st.header("🧪 TimesMamba Testing")
+    
+    st.markdown("""
+    **Why Test on Test Data, Not Validation Data?**
+    - ✅ **Test Data:** Completely new (model never seen before) → True evaluation
+    - ❌ **Validation Data:** Was seen during training (affects model learning)
+    
+    **Data Split in Our Project:**
+    - 70% Training data: Used to teach model
+    - 15% Validation data: Used to monitor training & select best model
+    - 15% Test data: Used to evaluate final performance (true metric)
+    """)
     
     col1, col2 = st.columns(2)
     
@@ -162,65 +209,187 @@ def show_comparison_tab():
     """Model comparison tab"""
     st.header("🏆 Model Comparison")
     
-    # Collect results from both training and testing
-    datasets = ['ETTh1', 'ETTh2', 'ETTm1', 'ETTm2']
-    comparison_data = []
+    # Initialize results manager
+    manager = ResultsManager()
+    summary = manager.get_summary_stats()
     
-    for ds in datasets:
-        model_file = f"train/best_model_{ds}.pth"
-        train_plot = f"train/training_loss_{ds}.png"
-        test_plot = f"test/simple_test_{ds}.png"
-        
-        row = {
-            'Dataset': ds,
-            'Model Trained': '✅' if os.path.exists(model_file) else '❌',
-            'Training Plot': '✅' if os.path.exists(train_plot) else '❌', 
-            'Test Results': '✅' if os.path.exists(test_plot) else '❌',
-        }
-        comparison_data.append(row)
+
     
-    # Display comparison table
-    st.subheader("📊 Status Overview")
-    comparison_df = pd.DataFrame(comparison_data)
-    st.dataframe(comparison_df, width=800)
+    # Display summary statistics
+    st.subheader("📊 Experiment Summary")
     
-    # Show plots side by side
-    st.subheader("📈 Training Loss Comparison")
-    
-    cols = st.columns(2)
-    plot_idx = 0
-    
-    for ds in datasets:
-        train_plot = f"train/training_loss_{ds}.png"
-        if os.path.exists(train_plot):
-            with cols[plot_idx % 2]:
-                st.image(train_plot, caption=f"{ds} Training Loss")
-                plot_idx += 1
-    
-    st.subheader("🧪 Test Results Comparison") 
-    
-    cols = st.columns(2)
-    plot_idx = 0
-    
-    for ds in datasets:
-        test_plot = f"test/simple_test_{ds}.png"
-        if os.path.exists(test_plot):
-            with cols[plot_idx % 2]:
-                st.image(test_plot, caption=f"{ds} Test Results")
-                plot_idx += 1
-    
-    # Summary
-    trained_count = sum(1 for row in comparison_data if row['Model Trained'] == '✅')
-    tested_count = sum(1 for row in comparison_data if row['Test Results'] == '✅')
-    
-    st.subheader("📋 Summary")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Datasets", len(datasets))
-    with col2: 
-        st.metric("Models Trained", trained_count)
+        st.metric("Total Experiments", summary['total_experiments'])
+    with col2:
+        st.metric("Number of Models", summary['num_models'])
     with col3:
-        st.metric("Tests Completed", tested_count)
+        st.metric("Number of Datasets", summary['num_datasets'])
+    with col4:
+        st.metric("Avg MSE", f"{summary['mse_stats']['mean']:.4f}")
+    
+    # Explain evaluation metrics
+    st.info("""
+    📌 **Understanding These Metrics:**
+    - **MSE (Mean Squared Error):** Penalizes larger errors more (squared)
+    - **MAE (Mean Absolute Error):** Average absolute deviation (easier to interpret)
+    - **Lower scores are better!** ↓
+    
+    ⚠️ **These are TEST metrics** (on new data never seen by model)
+    """)
+    
+    # First comparison tool: By Dataset and Prediction Length
+    st.subheader("📈 Model Comparison by Dataset & Prediction Length")
+    
+    # Tabs for different metrics
+    metric_tab1, metric_tab2 = st.tabs(["MSE Comparison", "MAE Comparison"])
+    
+    with metric_tab1:
+        st.markdown("**Mean Squared Error (Lower is Better ↓)**")
+        
+        # Get pivot table for MSE
+        pivot_mse = manager.get_pivot_table(metric='mse')
+        
+        if not pivot_mse.empty:
+            # Style the dataframe to highlight best values
+            def highlight_best(s):
+                min_val = s.min()
+                return [f'background-color: lightgreen' if v == min_val else '' for v in s]
+            
+            styled_df = pivot_mse.style.apply(highlight_best, axis=1).format("{:.3f}")
+            st.dataframe(styled_df, use_container_width=True)
+            
+            # Export option
+            csv = manager.export_to_csv()
+            with open(csv, 'r') as f:
+                csv_content = f.read()
+            st.download_button(
+                label="📥 Download Results as CSV",
+                data=csv_content,
+                file_name="model_comparison.csv",
+                mime="text/csv"
+            )
+    
+    with metric_tab2:
+        st.markdown("**Mean Absolute Error (Lower is Better ↓)**")
+        
+        # Get pivot table for MAE
+        pivot_mae = manager.get_pivot_table(metric='mae')
+        
+        if not pivot_mae.empty:
+            def highlight_best(s):
+                min_val = s.min()
+                return [f'background-color: lightgreen' if v == min_val else '' for v in s]
+            
+            styled_df = pivot_mae.style.apply(highlight_best, axis=1).format("{:.3f}")
+            st.dataframe(styled_df, use_container_width=True)
+    
+    # Second comparison tool: Filter by specific datasets/models
+    st.subheader("🔍 Detailed Comparison View")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        selected_models = st.multiselect(
+            "Select Models to Compare",
+            options=summary['models'],
+            default=summary['models'][:2] if len(summary['models']) >= 2 else summary['models']
+        )
+    
+    with col2:
+        selected_datasets = st.multiselect(
+            "Select Datasets",
+            options=summary['datasets'],
+            default=summary['datasets']
+        )
+    
+    if selected_models and selected_datasets:
+        # Get filtered comparison data
+        df = manager.get_model_comparison(models=selected_models, datasets=selected_datasets)
+        
+        if not df.empty:
+            # Create sortable table
+            display_df = df[['model', 'dataset', 'pred_len', 'mse', 'mae']].copy()
+            display_df.columns = ['Model', 'Dataset', 'Prediction Length', 'MSE', 'MAE']
+            display_df = display_df.sort_values(['Dataset', 'Prediction Length', 'MSE'])
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            # Visualization
+            st.subheader("📊 Performance Visualization")
+            
+            # Chart: MSE by Model
+            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+            
+            # Prepare data for plotting
+            for idx, dataset in enumerate(selected_datasets[:2]):  # Plot first 2 datasets
+                # Filter data for this dataset
+                dataset_df = df[df['dataset'] == dataset].sort_values('pred_len')
+                
+                if not dataset_df.empty:
+                    ax = axes[idx] if len(selected_datasets) <= 2 else axes[0]
+                    
+                    for model in selected_models:
+                        model_data = dataset_df[dataset_df['model'] == model]
+                        if not model_data.empty:
+                            ax.plot(model_data['pred_len'], model_data['mse'], marker='o', label=model, linewidth=2)
+                    
+                    ax.set_xlabel('Prediction Length')
+                    ax.set_ylabel('MSE')
+                    ax.set_title(f'MSE vs Prediction Length - {dataset}')
+                    ax.legend()
+                    ax.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            st.pyplot(fig)
+    
+    # Best model by dataset
+    st.subheader("🥇 Best Model Rankings")
+    
+    best_models_mse = []
+    best_models_mae = []
+    
+    for dataset in summary['datasets']:
+        for pred_len in sorted(df['pred_len'].unique()):
+            best_mse = manager.get_best_model(dataset, int(pred_len), metric='mse')
+            best_mae = manager.get_best_model(dataset, int(pred_len), metric='mae')
+            
+            if best_mse:
+                best_models_mse.append({
+                    'Dataset': dataset,
+                    'Prediction Length': pred_len,
+                    'Best Model (MSE)': best_mse[0],
+                    'MSE Score': f"{best_mse[1]:.4f}"
+                })
+            
+            if best_mae:
+                best_models_mae.append({
+                    'Dataset': dataset,
+                    'Prediction Length': pred_len,
+                    'Best Model (MAE)': best_mae[0],
+                    'MAE Score': f"{best_mae[1]:.4f}"
+                })
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Best Models by MSE**")
+        if best_models_mse:
+            st.dataframe(pd.DataFrame(best_models_mse), use_container_width=True, hide_index=True)
+    
+    with col2:
+        st.write("**Best Models by MAE**")
+        if best_models_mae:
+            st.dataframe(pd.DataFrame(best_models_mae), use_container_width=True, hide_index=True)
+    
+    # Results management - Clear option
+    st.subheader("⚙️ Manage Results")
+    
+    if st.button("🗑️ Clear All Results", type="secondary"):
+        manager.clear_results()
+        st.success("All results cleared")
+        st.rerun()
+
 
 def main():
     st.set_page_config(
