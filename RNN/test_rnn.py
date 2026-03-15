@@ -19,9 +19,14 @@ from data_provider.data_factory import data_provider
 
 class Args:
     def __init__(self, dataset='ETTh1'):
-        self.root_path = f'../train/datasets/{dataset}'
+        script_dir = os.path.dirname(__file__)
         self.data = dataset
-        self.data_path = f'{dataset}_train.csv'
+        if dataset.lower() == 'weather':
+            self.root_path = os.path.abspath(os.path.join(script_dir, '..', 'dataset', 'weather'))
+            self.data_path = 'weather.csv'
+        else:
+            self.root_path = f'../train/datasets/{dataset}'
+            self.data_path = f'{dataset}_train.csv'
         
         self.seq_len = 96
         self.label_len = 48
@@ -43,7 +48,7 @@ class Args:
 
 def test_model():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    dataset = 'ETTh1'
+    dataset = 'weather'
     args = Args(dataset)
     
     # Load test data

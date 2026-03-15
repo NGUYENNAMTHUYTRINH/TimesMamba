@@ -25,9 +25,14 @@ class Args:
     def __init__(self, dataset='ETTh1'):
         # Dataset config
         script_dir = os.path.dirname(__file__)
-        self.root_path = os.path.abspath(os.path.join(script_dir, '..', 'train', 'datasets', dataset))
         self.data = dataset
-        self.data_path = f'{dataset}_train.csv'
+        # If using the external 'weather' dataset, point to project dataset/weather
+        if dataset.lower() == 'weather':
+            self.root_path = os.path.abspath(os.path.join(script_dir, '..', 'dataset', 'weather'))
+            self.data_path = 'weather.csv'
+        else:
+            self.root_path = os.path.abspath(os.path.join(script_dir, '..', 'train', 'datasets', dataset))
+            self.data_path = f'{dataset}_train.csv'
         
         # Model config
         self.seq_len = 96
@@ -106,16 +111,31 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
-    dataset = 'ETTh1'
+    dataset = os.getenv('DATASET', 'weather')
     args = Args(dataset)
+    # allow quick override of epochs via env var for short runs
+    try:
+        args.train_epochs = int(os.getenv('TRAIN_EPOCHS', args.train_epochs))
+    except Exception:
+        pass
     
     # Create data loaders
     train_data, train_loader = data_provider(args, 'train')
     val_data, val_loader = data_provider(args, 'val')
     
+    # Determine input feature dimension from dataset (important for custom datasets like 'weather')
+    enc_in = getattr(train_data, 'data_x', None)
+    if enc_in is not None:
+        try:
+            enc_in = train_data.data_x.shape[1]
+        except Exception:
+            enc_in = args.enc_in
+    else:
+        enc_in = args.enc_in
+
     # Model
     model = RNNModel(
-        enc_in=args.enc_in,
+        enc_in=enc_in,
         seq_len=args.seq_len,
         pred_len=args.pred_len,
         d_model=args.d_model,

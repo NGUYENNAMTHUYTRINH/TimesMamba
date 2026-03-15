@@ -171,3 +171,5 @@ test_results
 !test_results/.placeholder
 result_*.txt
 my_app.log*
+
+predictions_weather.csv

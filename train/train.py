@@ -37,17 +37,23 @@ from data_provider.data_factory import data_provider
 
 class Args:
     def __init__(self, dataset='ETTh1'):
-        # Dataset config (datasets live under train/datasets)
+        # Dataset config
         script_dir = os.path.dirname(__file__)
-        self.root_path = os.path.join(script_dir, 'datasets', dataset)
         self.data = dataset
-        self.data_path = f'{dataset}_train.csv'  # Use train split
+        # Special-case the provided weather dataset located at project_root/dataset/weather/weather.csv
+        if dataset.lower() == 'weather':
+            self.root_path = os.path.abspath(os.path.join(script_dir, '..', 'dataset', 'weather'))
+            self.data_path = 'weather.csv'
+        else:
+            # datasets live under train/datasets by default
+            self.root_path = os.path.join(script_dir, 'datasets', dataset)
+            self.data_path = f'{dataset}_train.csv'  # Use train split
         
         # Model config
         self.seq_len = 96
         self.label_len = 48  
         self.pred_len = 24
-        self.enc_in = 4  # OT, M1, M2, M3
+        self.enc_in = 21  # OT, M1, M2, M3
         self.d_model = 64
         self.d_ff = 128
         self.dropout = 0.1
@@ -163,22 +169,57 @@ def train_model(args):
     
     return model, train_losses
 
-def main():
-    """Main training function"""
-    datasets = ['ETTh1', 'ETTh2', 'ETTm1', 'ETTm2']
-    
+def main(datasets=None, epochs=None):
+    """Main training function
+    If `datasets` is provided (list), train on those datasets; otherwise defaults to ['weather'].
+    """
+    if datasets is None:
+        datasets = ['weather']
+
     for dataset in datasets:
         print(f"\n{'='*60}")
         print(f"Training on {dataset}")
         print(f"{'='*60}")
         
         args = Args(dataset=dataset)
+        if epochs is not None:
+            args.train_epochs = int(epochs)
         model, losses = train_model(args)
         
         if model is not None:
             print(f"[SUCCESS] {dataset} training completed!")
             print(f"Final loss: {losses[-1]:.6f}")
             print(f"Best loss: {min(losses):.6f}")
+            # Ensure project-level directories exist and move/save artifacts there
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            saved_dir = os.path.join(project_root, 'saved_models')
+            figures_dir = os.path.join(project_root, 'figures')
+            os.makedirs(saved_dir, exist_ok=True)
+            os.makedirs(figures_dir, exist_ok=True)
+            # Move model to saved_models
+            model_dest = os.path.join(saved_dir, f'best_model_TimesMamba_{dataset}.pth')
+            try:
+                torch.save(model.state_dict(), model_dest)
+                print(f"Model saved: {model_dest}")
+            except Exception:
+                # fallback: save to current folder as before
+                torch.save(model.state_dict(), f'best_model_{dataset}.pth')
+                print(f"Model saved to fallback path: best_model_{dataset}.pth")
+            # Save plot to figures dir
+            plot_dest = os.path.join(figures_dir, f'training_loss_TimesMamba_{dataset}.png')
+            try:
+                plt.figure(figsize=(10, 6))
+                plt.plot(losses, 'b-', label='Training Loss')
+                plt.xlabel('Epoch')
+                plt.ylabel('MSE Loss')
+                plt.title(f'TimesMamba Training - {dataset}')
+                plt.legend()
+                plt.grid(True)
+                plt.savefig(plot_dest, dpi=300, bbox_inches='tight')
+                plt.close()
+                print(f"Training plot saved: {plot_dest}")
+            except Exception as e:
+                print(f"Failed to save plot to figures: {e}")
         else:
             print(f"[ERROR] {dataset} training failed!")
     
@@ -186,4 +227,13 @@ def main():
     print(f"All models trained and saved in train/ folder")
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset', type=str, default=None, help='Dataset to train (e.g., weather, ETTh1)')
+    parser.add_argument('--epochs', type=int, default=None, help='Number of epochs to train (overrides default)')
+    args = parser.parse_args()
+
+    if args.dataset:
+        main(datasets=[args.dataset], epochs=args.epochs)
+    else:
+        main(epochs=args.epochs)

@@ -16,6 +16,7 @@ data_dict = {
     "Solar": Dataset_Solar,
     "PEMS": Dataset_PEMS,
     "custom": Dataset_Custom,
+    "weather": Dataset_Custom,
 }
 
 
